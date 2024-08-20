@@ -4,13 +4,11 @@ import argparse
 import os
 import numpy as np
 import speech_recognition as sr
-import whisper
-import torch
-
 from datetime import datetime, timedelta
 from queue import Queue
 from time import sleep
 from sys import platform
+from vosk import Model, KaldiRecognizer
 
 def list_audio_devices():
     """Lists the available audio input devices and their indices."""
@@ -18,27 +16,40 @@ def list_audio_devices():
     for index, name in enumerate(sr.Microphone.list_microphone_names()):
         print(f"Device Index: {index} - Device Name: {name}")
 
+def get_device_index(target_name):
+    """Returns the device index for the given device name."""
+    for index, name in enumerate(sr.Microphone.list_microphone_names()):
+        if target_name in name:
+            return index
+    return None
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="small", help="Model to use",
-                        choices=["tiny", "base", "small", "medium", "large"])
-    parser.add_argument("--non_english", action='store_true',
-                        help="Don't use the English model.")
-    parser.add_argument("--energy_threshold", default=1000,
+    parser.add_argument("--model_path", default="model", help="Path to the Vosk model directory")
+    parser.add_argument("--energy_threshold", default=500,
                         help="Energy level for mic to detect.", type=int)
-    parser.add_argument("--record_timeout", default=0.75,
+    parser.add_argument("--record_timeout", default=2,
                         help="How real-time the recording is in seconds.", type=float)
-    parser.add_argument("--phrase_timeout", default=1.25,
+    parser.add_argument("--phrase_timeout", default=3,
                         help="How much empty space between recordings before we "
                              "consider it a new line in the transcription.", type=float)
     parser.add_argument("--output_file", default="transcription.txt", help="File to write transcriptions to.", type=str)
-    parser.add_argument("--device_index", default=2, type=int,
-                        help="Device index of the microphone to use. Default is 2 for HyperX SoloCast.")
-    
+    parser.add_argument("--device_index", default=None, type=int,
+                        help="Device index of the microphone to use. Default is None to automatically select HyperX SoloCast.")
+
     args = parser.parse_args()
 
     # List audio devices on boot
     list_audio_devices()
+
+    # Automatically set the device index for HyperX SoloCast if not provided
+    if args.device_index is None:
+        args.device_index = get_device_index("HyperX SoloCast")
+        if args.device_index is None:
+            print("HyperX SoloCast not found. Please connect the device or specify another device index.")
+            return
+
+    print(f"Using device index {args.device_index} for HyperX SoloCast.")
 
     # The last time a recording was retrieved from the queue.
     phrase_time = None
@@ -51,23 +62,11 @@ def main():
     recorder.dynamic_energy_threshold = False
 
     # Use the specified device index
-    source = sr.Microphone(sample_rate=16000, device_index=args.device_index)
+    source = sr.Microphone(sample_rate=44100, device_index=args.device_index)
 
-    # Load / Download model
-    model = args.model
-    if args.model != "large" and not args.non_english:
-        model = model + ".en"
-    audio_model = whisper.load_model(model)
-
-    # Set the device to MPS if available, otherwise fallback to CPU
-    device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-
-    try:
-        audio_model = audio_model.to(device)
-    except NotImplementedError:
-        print("MPS backend doesn't support some operations. Falling back to CPU.")
-        device = torch.device("cpu")
-        audio_model = audio_model.to(device)
+    # Load the Vosk model
+    vosk_model = Model(args.model_path)
+    recognizer = KaldiRecognizer(vosk_model, 44100)
 
     record_timeout = args.record_timeout
     phrase_timeout = args.phrase_timeout
@@ -112,14 +111,10 @@ def main():
                     audio_data = b''.join(data_queue.queue)
                     data_queue.queue.clear()
                     
-                    # Convert in-ram buffer to something the model can use directly without needing a temp file.
-                    # Convert data from 16-bit wide integers to floating point with a width of 32 bits.
-                    # Clamp the audio stream frequency to a PCM wavelength compatible default of 32768hz max.
-                    audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-
-                    # Read the transcription.
-                    result = audio_model.transcribe(audio_np, fp16=False if device.type == "cpu" else True)
-                    text = result['text'].strip()
+                    # Recognize speech using Vosk
+                    recognizer.AcceptWaveform(audio_data)
+                    result = recognizer.Result()
+                    text = result.get('text', '').strip()
 
                     # If we detected a pause between recordings, add a new item to our transcription.
                     # Otherwise, edit the existing one.
