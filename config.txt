@@ -1,0 +1,11 @@
+Office - 10.0.0.176
+Bedroom - 10.0.0.202 
+Dining - 10.0.0.74
+Living - 10.0.0.214
+Upstairs Hall - 10.0.0.27
+Downstairs Hall - 10.0.0.235
+Guest Bedroom - 10.0.0.75
+Kitchen - 10.0.0.21
+Bathroom - 10.0.0.36
+$Dining Room Lamp - 10.0.0.195
+$Office Monitor Lights - 10.0.0.218

@@ -1,0 +1,9 @@
+Office - 10.0.0.176 - Rocker
+Bedroom - 10.0.0.202 - Rocker
+Dining - 10.0.0.74 - Flat
+Living - 10.0.0.214 - Flat
+Upstairs Hall - 10.0.0.27 - Rocker
+Downstairs Hall - 10.0.0.235 - Rocker
+Guest Bedroom - 10.0.0.75 - Rocker
+Kitchen - 10.0.0.21 - Rocker
+Bathroom - 10.0.0.36 - Rocker
