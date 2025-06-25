@@ -1,0 +1,7 @@
+log.txt
+*.log
+.claude/
+__pycache__/
+*.pyc
+.DS_Store
+schedules.db
